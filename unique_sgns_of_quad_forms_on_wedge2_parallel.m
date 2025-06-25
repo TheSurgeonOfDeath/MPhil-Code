@@ -1,17 +1,6 @@
 % H = R^n, we want to determine possible signatures of symmetric bilinear
 % forms on Wedge^2 H, which can be identified with q in Wedge^4 H^*.
-
-% parpool; 
-
-
-n = 7;
-
-% fid = fopen("unique_sgns_" + n + "_parallel.csv", "w");
-% % x = [1,2,3];
-% % % fprintf(fid, "1,2,3\n")
-% % fprintf(fid, "%d,%d,%d\n", x);
-% fclose(fid);
-
+n = 5;
 
 wedge_basis_idx = nchoosek(1:n,2);
 k = length(wedge_basis_idx);
@@ -28,79 +17,56 @@ for i = 1:m
     mats{i} = symm_matrix(wedge_basis_idx, quad_forms{i});
 end
 
-% comb_mats = nchoosek(mats,2)
-% comb_mats(1,:)
+comb_mats = nchoosek(mats,2)
+comb_mats(1,:)
 
-% allmats = sparse(k,k,2^m - 1)
-% allmats = cell(1,2^m - 1);
-% idxs = zeros(2^m - 1,2);
-% allmats = {}
+%%
+
+allmats = cell(1,2^m - 1);
 current_idx = 0;
-unique_sgns = zeros(1,3);
 for i = 1:m
     p = nchoosek(m,i);
     comb_mats = nchoosek(mats,i);
     for j = 1:p
+        current_idx = current_idx + 1;
         c_mats = comb_mats(j,:);
         sum_mat = comb_mats{j,1};
         for r = 2:i
             sum_mat = sum_mat + comb_mats{j,r};
         end
-        current_mat = sparse(sum_mat);
-        current_sgn = signature_matrix(current_mat);
-        if ~ismember(current_sgn, unique_sgns, "rows")
-            current_idx = current_idx + 1;
-            unique_sgns(current_idx,:) = current_sgn;
-        end
+        allmats{current_idx} = sum_mat;
     end
 end
 
-unique_sgns = full(unique_sgns(1:current_idx,:));
+%%
+signatures = zeros(length(allmats),3);
+for i = 1:length(allmats)
+    signatures(i,:) = signature_matrix(allmats{i});
+end
+signatures
 
-filename = "unique_sgns_" + n + "_parallel.csv";
-writematrix(unique_sgns, filename);
-
-
-
-% A = [1 2 3; 4 5 6; 7 8 9];
-% x = [4 5 6];
-% 
-% if ismember(x,A,"rows")
-%     "yes"
-% end
-
-% signatures = zeros(length(allmats),3);
-% for i = 1:length(allmats)
-%     signatures(i,:) = signature_matrix(allmats{i});
-% end
-% signatures
-% unique_sgns = unique(signatures,"rows")
+unique_sgns = unique(signatures,"rows");
 
 % filename = "unique_sgns_" + n + ".mat";
 % save(filename, "unique_sgns");
+filename = "unique_sgns.csv";
+writematrix(unique_sgns, filename);
 
 % signature_quad_form(wedge_basis_idx, quad_forms{1})
 
 %%
-c = find(signatures(:,3) == 0)
-crit = 17; % (5 choose 1) + (5 choose 1) = 15 so in (5 choose 3).
-nondegen_mats = nchoosek(mats,3)
-
-nondegen_mats{2,:}
-
-%%
-% q1 = @(b1,b2) q_form([1 2 3 4],b1,b2);
-% q2 = @(b1,b2) q_form([1 3 4 5],b1,b2);
-% q3 = @(b1,b2) q_form([1 2 4 5],b1,b2);
-% mat1 = symm_matrix(wedge_basis_idx, q1)
-% mat2 = symm_matrix(wedge_basis_idx, q2)
-% mat3 = symm_matrix(wedge_basis_idx, q3)
-% eig(mat1)
-% sgn1 = signature_matrix(mat1)
-% eig(mat1 + mat2)
-% sgn2 = signature_matrix(mat1 + mat2)
-% eig(mat1 + mat2 + mat3)
-% sgn2 = signature_matrix(mat1 + mat2 + mat3)
+q1 = @(b1,b2) q_form([1 2 3 4],b1,b2);
+q2 = @(b1,b2) q_form([1 3 4 5],b1,b2);
+q3 = @(b1,b2) q_form([1 2 4 5],b1,b2);
+mat1 = symm_matrix(wedge_basis_idx, q1)
+mat2 = symm_matrix(wedge_basis_idx, q2)
+mat3 = symm_matrix(wedge_basis_idx, q3)
+eig(mat1)
+sgn1 = signature_matrix(mat1)
+eig(mat1 + mat2)
+sgn2 = signature_matrix(mat1 + mat2)
+eig(mat1 + mat2 + mat3)
+sgn2 = signature_matrix(mat1 + mat2 + mat3)
 
 % mats = cell(m);
 % for i = 1:m
@@ -116,33 +82,18 @@ nondegen_mats{2,:}
 % 
 % signature_quad_form(wedge_basis_idx, quad_forms{1})
 
-%%
-q1 = @(b1,b2) q_form([1 2 3 4],b1,b2);
-mat1 = symm_matrix(wedge_basis_idx, q1)
-
 function mat = symm_matrix(wedge_basis_idx, quad_form)
     k = length(wedge_basis_idx);
-    indices = zeros(3,2);
-    vals = zeros(3,1);
-    % mat = sparse(k,k);
-    current_idx = 0;
+    mat = zeros(k,k);
     for i = 1:k
-        for j = 1:i
-            val = quad_form(wedge_basis_idx(i,:), wedge_basis_idx(j,:));
-            if val
-                current_idx = current_idx + 1;
-                indices(current_idx,:) = [i,j];
-                vals(current_idx) = val;
-            end
+        for j = 1:k
+            mat(i,j) = quad_form(wedge_basis_idx(i,:), wedge_basis_idx(j,:));
         end
     end
-    upper = sparse(indices(:,1), indices(:,2),vals, k,k);
-    lower = sparse(indices(:,2), indices(:,1),vals,k,k);
-    mat = upper + lower;
 end
 
 function sgn = signature_matrix(symm_matrix)
-    eig_mat = eig(full(symm_matrix));
+    eig_mat = eig(symm_matrix);
     p = length(eig_mat(eig_mat > 0));
     q = length(eig_mat(eig_mat < 0));
     r = size(symm_matrix,1) - (p + q);
