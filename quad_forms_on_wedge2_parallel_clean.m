@@ -33,7 +33,7 @@ fid = fopen(filename, "w");
 
 % generate signatures by generating all linear combinations of basic quad_forms
 current_idx = 0;
-unique_sgns = zeros(1,3);
+seen_sgns = containers.Map('KeyType', 'char', 'ValueType', 'logical');
 for i = 1:n % only sum up to n terms because after that the indices start repeating.
     p = nchoosek(m,i);
     comb_mats = nchoosek(1:m,i);
@@ -44,20 +44,25 @@ for i = 1:n % only sum up to n terms because after that the indices start repeat
         end
         current_mat = sparse(sum_mat);
         current_sgn = signature_matrix(current_mat);
+        sgn_key = sprintf('%d_%d_%d', current_sgn);
 
-        % if signature is unique, write it to file with the form it comes from
-        if ~ismember(current_sgn, unique_sgns, "rows")
-            current_idx = current_idx + 1;
-            unique_sgns(current_idx,:) = current_sgn
-            fprintf(fid, "%d,%d,%d", current_sgn);
-
-            forms = quad_forms_basis_idx(comb_mats(j,:),:);
-            str = forms_idx_str(forms)
-            fprintf(fid,",%s\n", str);
-            % comb_mats{j,:}
-            % sum_mat
-            [i j]
+        % if signature is not unique, skip
+        if isKey(seen_sgns, sgn_key)
+            continue;
         end
+        seen_sgns(sgn_key) = true;
+
+        % write signature to file
+        current_idx = current_idx + 1;
+        % unique_sgns(current_idx,:) = current_sgn
+        % current_sgn
+        fprintf(fid, "%d,%d,%d", current_sgn);
+        
+        % write forms to file
+        forms = quad_forms_basis_idx(comb_mats(j,:),:);
+        str = forms_idx_str(forms);
+        fprintf(fid,",%s\n", str);
+        [i j]
     end
 end
 fclose(fid);
