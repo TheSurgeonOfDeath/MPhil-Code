@@ -28,7 +28,7 @@ end
 
 
 % file to save data
-filename = "unique_sgns_" + n + "_parallel_with_forms.csv";
+filename = "unique_sgns_" + n + "_parallel_with_forms_8-9.csv";
 fid = fopen(filename, "w");
 
 % generate signatures by generating all linear combinations of basic quad_forms
