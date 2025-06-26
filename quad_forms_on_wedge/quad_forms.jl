@@ -41,14 +41,14 @@ function symm_matrix(wedge_basis_idx::Vector{Vector{Int}}, q::Function)
 end
 
 
-# function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{Int})
-#     b1 = q[1,2]
-#     b2 = q[3,4]
-#     b3 = q[1,3]
-#     b4 = q[2,4]
-#     row1 = findfirst(x -> x == b1, wedge_basis_idx)
+function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{Int})
+    b1 = q[1,2]
+    b2 = q[3,4]
+    b3 = q[1,3]
+    b4 = q[2,4]
+    row1 = findfirst(x -> x == b1, wedge_basis_idx)
 
-# end
+end
 
 function signature_matrix(mat::SparseMatrixCSC{Int, Int})
     evals = eigvals(Matrix(mat))
