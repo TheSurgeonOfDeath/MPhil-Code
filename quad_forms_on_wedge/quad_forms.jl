@@ -139,19 +139,26 @@ function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_siz
         end
 
         # Save intermediate results
-        filename = "data Julia/unique_sgns_$(n)/size_$(i).csv"
-        print_signatures(filename, unique_signatures, unique_quad_forms)
+        dir = "data Julia/unique_sgns_$(n)"
+        mkpath(dir)
+        filename = "size_$(i).csv"
+        path = joinpath(dir, filename)
+        print_signatures(path, unique_signatures, unique_quad_forms)
     end
     return (unique_signatures, unique_quad_forms)
 end
 
-n = 7
+n = 8
+known_size = 4
+max_size = n
+
+
 # @profview unique_signatures_quad_forms(n)
 
-file = "data Julia/unique_sgns_7/size_6.csv"
+file = "data Julia/unique_sgns_$(n)/size_$(known_size).csv"
 signatures, combos = read_signatures_file(file)
-@time unique_signatures_quad_forms(n,7,7, signatures, combos)
-# @time unique_signatures_quad_forms(n,n)
+@time unique_signatures_quad_forms(n, known_size + 1, max_size, signatures, combos)
+# @time unique_signatures_quad_forms(8,1,4)
 # unique_signature_forms = @benchmark unique_signatures_quad_forms(n,n)
 
 
