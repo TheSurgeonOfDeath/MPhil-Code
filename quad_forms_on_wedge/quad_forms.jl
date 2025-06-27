@@ -111,24 +111,21 @@ function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_siz
         push!(seen_signatures, hash_sgn(sgn))
     end
 
+    lk = ReentrantLock()
     # Find unique signatures
     for i in min_comb_size:max_comb_size
         @info "Processing combinations of size $i"
         combos = collect(combinations(1:m, i))
-        lk = ReentrantLock()
 
-        Threads.@threads for idx in eachindex(combos)
-            combo = combos[idx]
-            local sum_mat = zeros(Int, size(mats[1])...)  # Initialize sum_mat for each thread
-
-            # Sum matrices for the current combination
+        # Multithreaded processing of combinations
+        ThreadsX.foreach(combos) do combo
+            sum_mat = zeros(Int, size(mats[1])...)
             for j in combo
-                sum_mat .+= mats[j]  # Accumulate matrices for the current combination
+                sum_mat .+= mats[j]
             end
 
             sgn = signature_matrix(sum_mat)
             key = hash_sgn(sgn)
-
             lock(lk) do
                 if !(key in seen_signatures)
                     push!(seen_signatures, key)
@@ -148,71 +145,19 @@ function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_siz
     return (unique_signatures, unique_quad_forms)
 end
 
-# Function to compute unique signatures of quadrilinear forms
-function unique_signatures_quad_forms2(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
-    wedge_basis_idx = collect(combinations(1:n, 2))
-    quad_forms_basis_idx = collect(combinations(1:n, 4))
-    # k = length(wedge_basis_idx)
-    m = length(quad_forms_basis_idx)
-
-    # Precompute symmetric matrices
-    mats = [symm_matrix_quad_form(wedge_basis_idx, q) for q in quad_forms_basis_idx]
-
-    # Signature cache
-    seen_signatures = Set{UInt64}()
-    for sgn in unique_signatures
-        push!(seen_signatures, hash_sgn(sgn))
-    end
-
-    # Find unique signatures
-    for i in min_comb_size:max_comb_size
-        @info "Processing combinations of size $i"
-        combos = collect(combinations(1:m, i))
-
-        # Parallel map
-        results = ThreadsX.mapreduce(vcat, combos; init=Vector{Tuple{UInt64, Tuple{Int, Int, Int}, Vector{Vector{Int}}}}()) do combo
-            sum_mat = zeros(Int, size(mats[1])...)
-            for j in combo
-                sum_mat .+= mats[j]
-            end
-
-            sgn = signature_matrix(sum_mat)
-            key = hash_sgn(sgn)
-            return [(key, sgn, quad_forms_basis_idx[combo])]
-        end
-
-        # Deduplicate globally based on hash
-        for (key, sgn, quad_forms) in results
-            if !(key in seen_signatures)
-                push!(seen_signatures, key)
-                push!(unique_signatures, sgn)
-                push!(unique_quad_forms, quad_forms)
-            end
-        end
-
-        # Save intermediate results
-        dir = "data Julia/unique_sgns_$(n)"
-        mkpath(dir)
-        filename = "size_$(i).csv"
-        path = joinpath(dir, filename)
-        print_signatures(path, unique_signatures, unique_quad_forms)
-    end
-    return (unique_signatures, unique_quad_forms)
-end
-
-n = 7
-known_size = 6
-max_size = n
+n = 8
+known_size = 5
+max_size = 6
 
 
 # @profview unique_signatures_quad_forms(n)
 
 file = "data Julia/unique_sgns_$(n)/size_$(known_size).csv"
 signatures, combos = read_signatures_file(file)
-# @time unique_signatures_quad_forms(n, known_size + 1, max_size, signatures, combos)
+@time unique_signatures_quad_forms(n, known_size + 1, max_size, signatures, combos)
 # @time unique_signatures_quad_forms2(n, known_size + 1, max_size, signatures, combos)
-@time unique_signatures_quad_forms(8,1,4)
-@time unique_signatures_quad_forms2(8,1,4)
+# @time unique_signatures_quad_forms(8,4,4)
+# @time unique_signatures_quad_forms2(8,1,4)
 # unique_signature_forms = @benchmark unique_signatures_quad_forms(n,n)
 
 
