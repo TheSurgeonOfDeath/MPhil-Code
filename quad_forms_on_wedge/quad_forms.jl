@@ -71,7 +71,7 @@ function read_signatures_file(filename::String)
     return signatures, quad_forms
 end
 
-function print_signatures(filename::String, mode::String = "w", signatures::Vector{Tuple{Int, Int, Int}}, quad_forms_basis_idx::Vector{Vector{Vector{Int}}})
+function print_signatures(filename::String, signatures::Vector{Tuple{Int, Int, Int}}, quad_forms_basis_idx::Vector{Vector{Vector{Int}}}, mode::String = "w")
      # Output file
     open(filename, mode) do io
         for (sgn,combo) in zip(signatures, quad_forms_basis_idx)
@@ -145,58 +145,13 @@ function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_siz
     return (unique_signatures, unique_quad_forms)
 end
 
-# Function to compute unique signatures of quadrilinear forms
-function unique_signatures_quad_forms2(n::Int, max_comb_size::Int=4)
-    wedge_basis_idx = collect(combinations(1:n, 2))
-    quad_forms_basis_idx = collect(combinations(1:n, 4))
-    # k = length(wedge_basis_idx)
-    m = length(quad_forms_basis_idx)
-
-    # Precompute symmetric matrices
-    mats = [symm_matrix_quad_form(wedge_basis_idx, q) for q in quad_forms_basis_idx]
-
-    # Signature cache
-    seen_signatures = Set{UInt8}()
-
-    # Find unique signatures
-    unique_signatures = Vector{Tuple{Int, Int, Int}}()
-    unique_quad_forms = Vector{Vector{Vector{Int}}}()
-    for i in 1:max_comb_size
-        @info "Processing combinations of size $i"
-        combos = collect(combinations(1:m, i))
-
-        # Parallel map
-        results = ThreadsX.mapreduce(vcat, combos; init=Vector{Tuple{UInt64, Tuple{Int, Int, Int}, Vector{Vector{Int}}}}()) do combo
-            sum_mat = zeros(Int, size(mats[1])...)
-            for j in combo
-                sum_mat .+= mats[j]
-            end
-
-            sgn = signature_matrix(sum_mat)
-            key = hash_sgn(sgn)
-            return [(key, sgn, quad_forms_basis_idx[combo])]
-        end
-
-        # Deduplicate globally based on hash
-        for (key, sgn, combo) in results
-            if !(key in seen_signatures)
-                push!(seen_signatures, key)
-                push!(unique_signatures, sgn)
-                push!(unique_quad_forms, combo)
-            end
-        end
-
-        # Save intermediate results
-        filename = "data Julia/unique_sgns_$(n)/size_$(i).csv"
-        print_signatures(filename, unique_signatures, unique_quad_forms)
-    end
-    return (unique_signatures, unique_quad_forms)
-end
-
 n = 7
 # @profview unique_signatures_quad_forms(n)
-@time unique_signatures_quad_forms(n,n)
-@time unique_signatures_quad_forms2(n,n)
+
+file = "data Julia/unique_sgns_7/size_6.csv"
+signatures, combos = read_signatures_file(file)
+@time unique_signatures_quad_forms(n,7,7, signatures, combos)
+# @time unique_signatures_quad_forms(n,n)
 # unique_signature_forms = @benchmark unique_signatures_quad_forms(n,n)
 
 
