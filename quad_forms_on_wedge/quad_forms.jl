@@ -17,35 +17,35 @@ end
 # Distributed.addprocs(4-Distributed.nprocs())
 
 
-# function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{Int})
-#     elem_idx = collect(combinations(1:4, 2))
-#     rows = Vector{Int}(undef, 3)
-#     cols = Vector{Int}(undef, 3)
-#     for i in 1:3
-#         rows[i] = findfirst(x -> x == q[elem_idx[i]], wedge_basis_idx)
-#         cols[i] = findfirst(x -> x == q[elem_idx[7-i]], wedge_basis_idx)
-#     end
-#     vals = [1,-1,1]
-#     vals = [vals; vals]
-#     rows_tmp = rows
-#     rows = [rows; cols]
-#     cols = [cols; rows_tmp]
-#     return Matrix(sparse(rows, cols, vals, length(wedge_basis_idx), length(wedge_basis_idx)))
-# end
-
 function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{Int})
     elem_idx = collect(combinations(1:4, 2))
-    k = length(wedge_basis_idx)
-    mat = zeros(Int, k, k)
-    vals = [1, -1, 1]
+    rows = Vector{Int}(undef, 3)
+    cols = Vector{Int}(undef, 3)
     for i in 1:3
-        row = findfirst(x -> x == q[elem_idx[i]], wedge_basis_idx)
-        col = findfirst(x -> x == q[elem_idx[7 - i]], wedge_basis_idx)
-        mat[row, col] = vals[i]
-        mat[col, row] = vals[i]
+        rows[i] = findfirst(x -> x == q[elem_idx[i]], wedge_basis_idx)
+        cols[i] = findfirst(x -> x == q[elem_idx[7-i]], wedge_basis_idx)
     end
-    return mat
+    vals = [1,-1,1]
+    vals = [vals; vals]
+    rows_tmp = rows
+    rows = [rows; cols]
+    cols = [cols; rows_tmp]
+    return Matrix(sparse(rows, cols, vals, length(wedge_basis_idx), length(wedge_basis_idx)))
 end
+
+# function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{Int})
+#     elem_idx = collect(combinations(1:4, 2))
+#     k = length(wedge_basis_idx)
+#     mat = zeros(Int, k, k)
+#     vals = [1, -1, 1]
+#     for i in 1:3
+#         row = findfirst(x -> x == q[elem_idx[i]], wedge_basis_idx)
+#         col = findfirst(x -> x == q[elem_idx[7 - i]], wedge_basis_idx)
+#         mat[row, col] = vals[i]
+#         mat[col, row] = vals[i]
+#     end
+#     return mat
+# end
 
 
 @everywhere function signature_matrix(mat::Matrix{Int})
@@ -227,6 +227,75 @@ function unique_signatures_quad_forms_dist(n::Int, min_comb_size::Int=1, max_com
     return (unique_signatures, unique_quad_forms)
 end
 
+@everywhere function compute_signatures_batch(combos, mats, quad_forms_basis_idx)
+    local_signatures = Vector{Tuple{Int, Int, Int}}()
+    local_forms = Vector{Vector{Vector{Int}}}()
+
+    for combo in combos
+        all_indices = vcat(quad_forms_basis_idx[combo]...)
+        if length(unique(all_indices)) < length(combo) + 3
+            continue
+        end
+
+        sum_mat = zeros(Int, size(mats[1])...)
+        for j in combo
+            sum_mat .+= mats[j]
+        end
+
+        sgn = signature_matrix(sum_mat)
+
+        push!(local_signatures, sgn)
+        push!(local_forms, quad_forms_basis_idx[combo])
+    end
+
+    return local_signatures, local_forms
+end
+
+# Function to compute unique signatures of quadrilinear forms
+function unique_signatures_quad_forms_dist2(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
+    wedge_basis_idx = collect(combinations(1:n, 2))
+    quad_forms_basis_idx = collect(combinations(1:n, 4))
+    # k = length(wedge_basis_idx)
+    m = length(quad_forms_basis_idx)
+
+    # Precompute symmetric matrices
+    mats = [symm_matrix_quad_form(wedge_basis_idx, q) for q in quad_forms_basis_idx]
+
+    # Signature cache
+    seen_signatures = Set{UInt64}()
+    for sgn in unique_signatures
+        push!(seen_signatures, hash_sgn(sgn))
+    end
+
+    BATCH_SIZE = 1000  # Tune this based on your system's memory and performance
+    for i in min_comb_size:max_comb_size
+        @info "Processing combinations of size $i (distributed)"
+        combos = collect(combinations(1:m, i))
+        batches = Iterators.partition(combos, BATCH_SIZE)
+
+        results = pmap(batch -> compute_signatures_batch(batch, mats, quad_forms_basis_idx), batches)
+
+        for (sgn_list, form_list) in results
+            for (sgn, combo) in zip(sgn_list, form_list)
+                key = hash_sgn(sgn)
+                if !(key in seen_signatures)
+                    push!(seen_signatures, key)
+                    push!(unique_signatures, sgn)
+                    push!(unique_quad_forms, combo)
+                end
+            end
+        end
+    end
+
+    # Save intermediate results
+    dir = "data Julia/unique_sgns_$(n)"
+    mkpath(dir)
+    filename = "size_$(max_comb_size)__distributed.csv"
+    path = joinpath(dir, filename)
+    print_signatures(path, unique_signatures, unique_quad_forms)
+    return (unique_signatures, unique_quad_forms)
+end
+
 n = 8
 known_size = 4
 max_size = 5
@@ -242,8 +311,8 @@ signatures, combos = read_signatures_file(file)
 
 # Perfect benchmarking (around 30 seconds for n=8)
 @time unique_signatures_quad_forms(8,1,4)
-@time unique_signatures_quad_forms2(8,1,4)
 @time unique_signatures_quad_forms_dist(8,1,4)
+@time unique_signatures_quad_forms_dist2(8,1,4)
 
 
 # unique_signature_forms = @benchmark unique_signatures_quad_forms(n,n)
