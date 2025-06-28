@@ -99,59 +99,8 @@ function hash_sgn(sgn::NTuple{3, Int})
     # or just use Set{Tuple{Int,Int,Int}} or hash(sgn)
 end
 
-
 # Function to compute unique signatures of quadrilinear forms
 function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
-    wedge_basis_idx = collect(combinations(1:n, 2))
-    quad_forms_basis_idx = collect(combinations(1:n, 4))
-    # k = length(wedge_basis_idx)
-    m = length(quad_forms_basis_idx)
-
-    # Precompute symmetric matrices
-    mats = [symm_matrix_quad_form(wedge_basis_idx, q) for q in quad_forms_basis_idx]
-
-    # Signature cache
-    seen_signatures = Set{UInt64}()
-    for sgn in unique_signatures
-        push!(seen_signatures, hash_sgn(sgn))
-    end
-
-    lk = ReentrantLock()
-    # Find unique signatures
-    for i in min_comb_size:max_comb_size
-        @info "Processing combinations of size $i"
-        combos = collect(combinations(1:m, i))
-
-        # Multithreaded processing of combinations
-        ThreadsX.foreach(combos) do combo
-            sum_mat = zeros(Int, size(mats[1])...)
-            for j in combo
-                sum_mat .+= mats[j]
-            end
-
-            sgn = signature_matrix(sum_mat)
-            key = hash_sgn(sgn)
-            lock(lk) do
-                if !(key in seen_signatures)
-                    push!(seen_signatures, key)
-                    push!(unique_signatures, sgn)
-                    push!(unique_quad_forms, quad_forms_basis_idx[combo])
-                end
-            end
-        end
-
-        # Save intermediate results
-        dir = "data Julia/unique_sgns_$(n)"
-        mkpath(dir)
-        filename = "size_$(i).csv"
-        path = joinpath(dir, filename)
-        print_signatures(path, unique_signatures, unique_quad_forms)
-    end
-    return (unique_signatures, unique_quad_forms)
-end
-
-# Function to compute unique signatures of quadrilinear forms
-function unique_signatures_quad_forms2(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
     wedge_basis_idx = collect(combinations(1:n, 2))
     quad_forms_basis_idx = collect(combinations(1:n, 4))
     # k = length(wedge_basis_idx)
