@@ -161,33 +161,8 @@ function unique_signatures_quad_forms(n::Int, min_comb_size::Int=1, max_comb_siz
     return (unique_signatures, unique_quad_forms)
 end
 
+
 @everywhere function compute_signatures_batch(combos, mats, quad_forms_basis_idx)
-    local_signatures = Vector{Tuple{Int, Int, Int}}()
-    local_forms = Vector{Vector{Vector{Int}}}()
-
-    for combo in combos
-        all_indices = vcat(quad_forms_basis_idx[combo]...)
-        if length(unique(all_indices)) < length(combo) + 3
-            continue
-        end
-
-        sum_mat = zeros(Int, size(mats[1])...)
-        for j in combo
-            sum_mat .+= mats[j]
-        end
-
-        sgn = signature_matrix(sum_mat)
-
-        push!(local_signatures, sgn)
-        push!(local_forms, quad_forms_basis_idx[combo])
-    end
-
-    @info "Processed $(length(combos)) combinations, found $(length(local_signatures)) signatures in this batch"
-    return local_signatures, local_forms
-end
-
-
-@everywhere function compute_signatures_batch2(combos, mats, quad_forms_basis_idx)
     local_signatures = Vector{Tuple{Int, Int, Int}}()
     local_forms = Vector{Vector{Vector{Int}}}()
     seen_local = Set{UInt64}()
@@ -242,51 +217,6 @@ function unique_signatures_quad_forms_dist(n::Int, min_comb_size::Int=1, max_com
         batches = Iterators.partition(combos, BATCH_SIZE)
 
         results = pmap(batch -> compute_signatures_batch(batch, mats, quad_forms_basis_idx), batches)
-
-        for (sgn_list, form_list) in results
-            for (sgn, combo) in zip(sgn_list, form_list)
-                key = hash_sgn(sgn)
-                if !(key in seen_signatures)
-                    push!(seen_signatures, key)
-                    push!(unique_signatures, sgn)
-                    push!(unique_quad_forms, combo)
-                end
-            end
-        end
-    end
-
-    # Save intermediate results
-    dir = "data Julia/unique_sgns_$(n)"
-    mkpath(dir)
-    filename = "size_$(max_comb_size)__distributed.csv"
-    path = joinpath(dir, filename)
-    print_signatures(path, unique_signatures, unique_quad_forms)
-    return (unique_signatures, unique_quad_forms)
-end
-
-# Function to compute unique signatures of quadrilinear forms
-function unique_signatures_quad_forms_dist2(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
-    wedge_basis_idx = collect(combinations(1:n, 2))
-    quad_forms_basis_idx = collect(combinations(1:n, 4))
-    # k = length(wedge_basis_idx)
-    m = length(quad_forms_basis_idx)
-
-    # Precompute symmetric matrices
-    mats = [symm_matrix_quad_form(wedge_basis_idx, q) for q in quad_forms_basis_idx]
-
-    # Signature cache
-    seen_signatures = Set{UInt64}()
-    for sgn in unique_signatures
-        push!(seen_signatures, hash_sgn(sgn))
-    end
-
-    for i in min_comb_size:max_comb_size
-        @info "Processing combinations of size $i (distributed)"
-        combos = collect(combinations(1:m, i))
-        BATCH_SIZE = div(length(combos), nprocs()) # Dynamic batch size based on number of processes
-        batches = Iterators.partition(combos, BATCH_SIZE)
-
-        results = pmap(batch -> compute_signatures_batch2(batch, mats, quad_forms_basis_idx), batches)
 
         for (sgn_list, form_list) in results
             for (sgn, combo) in zip(sgn_list, form_list)
