@@ -49,10 +49,10 @@ function symm_matrix_quad_form(wedge_basis_idx::Vector{Vector{Int}}, q::Vector{I
 end
 
 
-@everywhere function signature_matrix(mat::Matrix{Int})
+@everywhere function signature_matrix(mat::Matrix{Int}; tol=1e-8)
     evals = eigvals(Symmetric(mat))
-    p = count(x -> x > 1e-8, evals)
-    q = count(x -> x < -1e-8, evals)
+    p = count(x -> x > tol, evals)
+    q = count(x -> x < -tol, evals)
     r = length(evals) - (p + q)
     return (p, q, r)
 end
