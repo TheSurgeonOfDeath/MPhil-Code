@@ -10,6 +10,7 @@ addprocs(8)
     using .Threads
     # import Pkg; Pkg.add("ThreadsX")
     using ThreadsX
+    using MKL
 end
 
 # import Distributed # for addprocs() and nprocs()
@@ -168,10 +169,10 @@ end
     seen_local = Set{UInt64}()
 
     for combo in combos
-        all_indices = vcat(quad_forms_basis_idx[combo]...)
-        if length(unique(all_indices)) < length(combo) + 3
-            continue
-        end
+        # all_indices = vcat(quad_forms_basis_idx[combo]...)
+        # if length(unique(all_indices)) < length(combo) + 3
+        #     continue
+        # end
 
         sum_mat = zeros(Int, size(mats[1])...)
         for j in combo
@@ -189,13 +190,20 @@ end
         push!(local_forms, quad_forms_basis_idx[combo])
     end
 
-    @info "Processed $(length(combos)) combinations, found $(length(local_signatures)) signatures in this batch"
+    # @info "Processed $(length(combos)) combinations, found $(length(local_signatures)) signatures in this batch"
     return local_signatures, local_forms
 end
 
 
 # Function to compute unique signatures of quadrilinear forms
-function unique_signatures_quad_forms_dist(n::Int, min_comb_size::Int=1, max_comb_size::Int=4, unique_signatures = Vector{Tuple{Int, Int, Int}}(), unique_quad_forms = Vector{Vector{Vector{Int}}}())
+function unique_signatures_quad_forms_dist(
+    n::Int,
+    min_comb_size::Int=1,
+    max_comb_size::Int=4,
+    unique_signatures = Vector{Tuple{Int, Int, Int}}(),
+    unique_quad_forms = Vector{Vector{Vector{Int}}}();
+    BATCH_SIZE::Int = 5_000
+)
     wedge_basis_idx = collect(combinations(1:n, 2))
     quad_forms_basis_idx = collect(combinations(1:n, 4))
     # k = length(wedge_basis_idx)
@@ -213,7 +221,7 @@ function unique_signatures_quad_forms_dist(n::Int, min_comb_size::Int=1, max_com
     for i in min_comb_size:max_comb_size
         @info "Processing combinations of size $i (distributed)"
         combos = collect(combinations(1:m, i))
-        BATCH_SIZE = div(length(combos), nprocs()) # Dynamic batch size based on number of processes
+        # BATCH_SIZE = div(length(combos), nprocs()) # Dynamic batch size based on number of processes
         batches = Iterators.partition(combos, BATCH_SIZE)
 
         results = pmap(batch -> compute_signatures_batch(batch, mats, quad_forms_basis_idx), batches)
@@ -248,14 +256,35 @@ max_size = 6
 
 file = "data Julia/unique_sgns_$(n)/size_$(known_size)__distributed.csv"
 signatures, combos = read_signatures_file(file)
+
+# wedge_basis_idx = collect(combinations(1:n, 2))
+# for combo in combos
+#     sum_mat = zeros(Int, length(wedge_basis_idx), length(wedge_basis_idx))
+#     for quad_form in combo
+#         sum_mat .+= symm_matrix_quad_form(wedge_basis_idx, quad_form)
+#     end
+#     eig_vals = eigvals(Symmetric(sum_mat))
+#     println("Eigenvalues for combo $(combo): $eig_vals")
+#     sgn = signature_matrix(sum_mat)
+#     println("Signature for combo $(combo): $sgn")
+# end
+
 # @time unique_signatures_quad_forms(n, known_size + 1, max_size, signatures, combos)
 # @time unique_signatures_quad_forms_dist(n, known_size + 1, max_size, signatures, combos)
-@time unique_signatures_quad_forms_dist2(n, known_size + 1, max_size, signatures, combos)
+# @time unique_signatures_quad_forms_dist2(n, known_size + 1, max_size, signatures, combos)
 
 # Perfect benchmarking (around 30 seconds for n=8)
 # @time unique_signatures_quad_forms(8,1,4)
-# @time unique_signatures_quad_forms_dist(8,1,4)
+@time unique_signatures_quad_forms_dist(8,1,4)
 # @time unique_signatures_quad_forms_dist2(8,1,4)
+
+# @time unique_signatures_quad_forms_dist(7,1,7)
+
+# for B in (2_000, 5_000, 10_000, 20_000)
+#     println("Trying BATCH_SIZE = $B")
+#     GC.gc()
+#     @time unique_signatures_quad_forms_dist(n, 6, 6; BATCH_SIZE=B)
+# end
 
 
 # unique_signature_forms = @benchmark unique_signatures_quad_forms(n,n)
